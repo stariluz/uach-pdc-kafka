@@ -3,6 +3,7 @@ import json
 import requests
 from kafka import KafkaProducer
 
+
 # Configuración de Kafka
 KAFKA_BROKER = 'localhost:9092'  # Cambia esto según la configuración de tu broker
 WEATHER_TOPIC = 'openWeather'

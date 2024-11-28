@@ -94,13 +94,9 @@ def main():
     fetch_weather_thread = threading.Thread(target=fetch_and_update_weather_data, daemon=True)
     fetch_weather_thread.start()
 
-    # Mantén el programa principal activo mientras el hilo está ejecutándose
-    print("Hilo del consumidor iniciado. Presiona Ctrl+C para detener.")
-    try:
-        while consumer_weather_thread.is_alive():
-            consumer_weather_thread.join(1)
-    except KeyboardInterrupt:
-        print("\nSaliendo del programa principal...")
+    # Graficar en el hilo principal
+    plot_weather_data()
+
 
 if __name__ == '__main__':
     main()
