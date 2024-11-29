@@ -5,61 +5,92 @@ import threading
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-
 # Configuración de Kafka
-KAFKA_BROKER = 'localhost:9092'  # Cambia esto según la configuración de tu broker
-WHEATER_TOPIC = 'openWeather'
-
+KAFKA_BROKER = 'localhost:9092'
 MONGO_URI = 'mongodb://root:this_is_a_password@localhost:27017'
-DATABASE_NAME = 'weather'
+
+OPENWEATHER_TOPIC = 'openWeather'
+NASA_WEATHER_TOPIC = 'nasa'
+
+OPENWEATHER_DB_NAME = 'weather'
+NASA_DB_NAME = 'mars_weather'
 COLLECTION_NAME = 'current'
 
 # Inicializa la conexión a MongoDB
 mongo_client = MongoClient(MONGO_URI)
-mongo_db = mongo_client[DATABASE_NAME]
-mongo_collection = mongo_db[COLLECTION_NAME]
+openweather_db = mongo_client[OPENWEATHER_DB_NAME]
+nasa_db = mongo_client[NASA_DB_NAME]
+openweather_collection = openweather_db[COLLECTION_NAME]
+nasa_collection = nasa_db[COLLECTION_NAME]
 
-# Lista para almacenar datos para la gráfica
-timestamps = []
-temperatures = []
+# Listas para almacenar datos para la gráfica 
+timestamps_openweather = []
+temperatures_openweather = []
+timestamps_nasa = []
+temperatures_nasa = []
 
-def consume_wheater():
-    """Consume los mensajes del tópico y los guarda en MongoDB."""
-    # Inicializa el consumidor de Kafka
-    wheather_consumer = KafkaConsumer(
-        WHEATER_TOPIC,
+def consume_weather():
+    """Consume los mensajes de OpenWeather y NASA y los guarda en MongoDB."""
+    # Inicializa el consumidor de Kafka para OpenWeather
+    openweather_consumer = KafkaConsumer(
+        OPENWEATHER_TOPIC,
         bootstrap_servers=KAFKA_BROKER,
-        auto_offset_reset='earliest',  # Leer desde el inicio si es la primera vez
+        auto_offset_reset='earliest',
         enable_auto_commit=True,
         group_id='weather-consumer-group',
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 
-    print(f"Conectado al tópico '{WHEATER_TOPIC}' en {KAFKA_BROKER}. Esperando mensajes...")
-    try:
-        for message in wheather_consumer:
-            data = message.value
-            print(f"Mensaje recibido: {data}")
+    # Inicializa el consumidor de Kafka para NASA
+    nasa_consumer = KafkaConsumer(
+        NASA_WEATHER_TOPIC,
+        bootstrap_servers=KAFKA_BROKER,
+        auto_offset_reset='earliest',
+        enable_auto_commit=True,
+        group_id='weather-consumer-group',
+        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    )
 
-            # Guardar en MongoDB
-            mongo_collection.insert_one(data)
-            print(f"Datos guardados en MongoDB: {data}")
+    print(f"Conectado al tópico '{OPENWEATHER_TOPIC}' y '{NASA_WEATHER_TOPIC}' en {KAFKA_BROKER}. Esperando mensajes...")
+
+    try:
+        # Consumir datos de ambos tópicos
+        for message in openweather_consumer:
+            data = message.value
+            print(f"Mensaje recibido de OpenWeather: {data}")
+            openweather_collection.insert_one(data)
+            print(f"Datos de OpenWeather guardados en MongoDB: {data}")
+
+        for message in nasa_consumer:
+            data = message.value
+            print(f"Mensaje recibido de NASA: {data}")
+            nasa_collection.insert_one(data)
+            print(f"Datos de NASA guardados en MongoDB: {data}")
+
     except KeyboardInterrupt:
-        print("\nDeteniendo el consumidor...")
+        print("\nDeteniendo los consumidores...")
     finally:
-        wheather_consumer.close()
+        openweather_consumer.close()
+        nasa_consumer.close()
         mongo_client.close()
 
 def fetch_and_update_weather_data():
     """Obtiene datos de MongoDB y actualiza las listas para la gráfica."""
-    global timestamps, temperatures
+    global timestamps_openweather, temperatures_openweather, timestamps_nasa, temperatures_nasa
     while True:
         try:
-            # Consulta MongoDB
-            all_data = list(mongo_collection.find().sort("timestamp", 1))
-            if all_data:
-                timestamps = [datetime.fromtimestamp(entry['timestamp']) for entry in all_data]
-                temperatures = [entry['temperature'] for entry in all_data]
+            # Consulta MongoDB para OpenWeather
+            openweather_data = list(openweather_collection.find().sort("timestamp", 1))
+            if openweather_data:
+                timestamps_openweather = [datetime.fromtimestamp(entry['timestamp']) for entry in openweather_data]
+                temperatures_openweather = [entry['temperature'] for entry in openweather_data]
+
+            # Consulta MongoDB para NASA
+            nasa_data = list(nasa_collection.find().sort("timestamp", 1))
+            if nasa_data:
+                timestamps_nasa = [datetime.fromtimestamp(entry['timestamp']) for entry in nasa_data]
+                temperatures_nasa = [entry['temperature'] for entry in nasa_data]
+
         except Exception as e:
             print(f"Error al obtener datos de MongoDB: {e}")
 
@@ -67,18 +98,25 @@ def plot_weather_data():
     """Grafica los datos en tiempo real."""
     plt.ion()  # Modo interactivo
     fig, ax = plt.subplots()
-    ax.set_title('Temperatura en tiempo real')
+    ax.set_title('Temperatura en tiempo real: OpenWeather vs NASA')
     ax.set_xlabel('Tiempo')
     ax.set_ylabel('Temperatura (°C)')
 
     while True:
         try:
-            if timestamps and temperatures:
+            if timestamps_openweather and temperatures_openweather and timestamps_nasa and temperatures_nasa:
                 ax.clear()
-                ax.plot(timestamps, temperatures, label='Temperatura')
+
+                # Graficar los datos de OpenWeather
+                ax.plot(timestamps_openweather, temperatures_openweather, label='OpenWeather', color='blue')
+
+                # Graficar los datos de NASA
+                ax.plot(timestamps_nasa, temperatures_nasa, label='NASA (Marte)', color='red')
+
                 ax.legend()
                 plt.gcf().autofmt_xdate()
                 plt.pause(1)  # Pausa para permitir la actualización
+
         except KeyboardInterrupt:
             print("\nCerrando la gráfica...")
             break
@@ -86,17 +124,16 @@ def plot_weather_data():
             print(f"Error al graficar: {e}")
 
 def main():
-    """Crea un hilo para ejecutar el consumidor."""
-    consumer_weather_thread = threading.Thread(target=consume_wheater, daemon=True)
-    consumer_weather_thread.start()
+    """Crea hilos para ejecutar los consumidores y actualizar los datos."""
+    consumer_thread = threading.Thread(target=consume_weather, daemon=True)
+    consumer_thread.start()
 
-    # Hilo para obtener datos de MongoDB
+    # Hilo para obtener y actualizar datos de MongoDB
     fetch_weather_thread = threading.Thread(target=fetch_and_update_weather_data, daemon=True)
     fetch_weather_thread.start()
 
     # Graficar en el hilo principal
     plot_weather_data()
-
 
 if __name__ == '__main__':
     main()
