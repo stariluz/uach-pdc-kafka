@@ -31,7 +31,14 @@ def get_weather_data():
     try:
         response = requests.get(URL)
         response.raise_for_status()
-        return response.json()
+        data=response.json()
+        return  {
+            'timestamp': time.time(),
+            'location': {'lat': LAT, 'lon': LON},
+            'temperature': data['main']['temp'],
+            'humidity': data['main']['humidity'],
+            'weather': data['weather'][0]['description']
+        }
     except requests.RequestException as e:
         print(f"Error al obtener los datos del clima: {e}")
         return None
@@ -80,19 +87,12 @@ def main():
     while True:
         weather_data = get_weather_data()
         if weather_data:
-            formatted_data = {
-                'timestamp': time.time(),
-                'location': {'lat': LAT, 'lon': LON},
-                'temperature': weather_data['main']['temp'],
-                'humidity': weather_data['main']['humidity'],
-                'weather': weather_data['weather'][0]['description']
-            }
-            send_to_kafka(formatted_data, WEATHER_TOPIC)
+            send_to_kafka(weather_data, WEATHER_TOPIC)
         
         mars_weather_data = get_mars_weather_data()
         if mars_weather_data:
             send_to_kafka(mars_weather_data, NASA_WEATHER_TOPIC)
-        time.sleep(60)
+        time.sleep(20)
 
 if __name__ == '__main__':
     main()
