@@ -29,9 +29,8 @@ temperatures_openweather = []
 timestamps_nasa = []
 temperatures_nasa = []
 
-def consume_weather():
-    """Consume los mensajes de OpenWeather y NASA y los guarda en MongoDB."""
-    # Inicializa el consumidor de Kafka para OpenWeather
+def consume_openweather():
+    """Consume mensajes de OpenWeather y guárdalos en MongoDB."""
     openweather_consumer = KafkaConsumer(
         OPENWEATHER_TOPIC,
         bootstrap_servers=KAFKA_BROKER,
@@ -41,7 +40,20 @@ def consume_weather():
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 
-    # Inicializa el consumidor de Kafka para NASA
+    print(f"Conectado al tópico '{OPENWEATHER_TOPIC}'")
+    try:
+        for message in openweather_consumer:
+            data = message.value
+            print(f"Mensaje recibido de OpenWeather: {data}")
+            openweather_collection.insert_one(data)
+            print(f"Datos de OpenWeather guardados en MongoDB: {data}")
+    except Exception as e:
+        print(f"Error al consumir OpenWeather: {e}")
+    finally:
+        openweather_consumer.close()
+
+def consume_nasa():
+    """Consume mensajes de NASA y guárdalos en MongoDB."""
     nasa_consumer = KafkaConsumer(
         NASA_WEATHER_TOPIC,
         bootstrap_servers=KAFKA_BROKER,
@@ -51,28 +63,18 @@ def consume_weather():
         value_deserializer=lambda x: json.loads(x.decode('utf-8'))
     )
 
-    print(f"Conectado al tópico '{OPENWEATHER_TOPIC}' y '{NASA_WEATHER_TOPIC}' en {KAFKA_BROKER}. Esperando mensajes...")
-
+    print(f"Conectado al tópico '{NASA_WEATHER_TOPIC}'")
     try:
-        # Consumir datos de ambos tópicos
-        for message in openweather_consumer:
-            data = message.value
-            print(f"Mensaje recibido de OpenWeather: {data}")
-            openweather_collection.insert_one(data)
-            print(f"Datos de OpenWeather guardados en MongoDB: {data}")
-
         for message in nasa_consumer:
             data = message.value
             print(f"Mensaje recibido de NASA: {data}")
             nasa_collection.insert_one(data)
             print(f"Datos de NASA guardados en MongoDB: {data}")
-
-    except KeyboardInterrupt:
-        print("\nDeteniendo los consumidores...")
+    except Exception as e:
+        print(f"Error al consumir NASA: {e}")
     finally:
-        openweather_consumer.close()
         nasa_consumer.close()
-        mongo_client.close()
+
 
 def fetch_and_update_weather_data():
     """Obtiene datos de MongoDB y actualiza las listas para la gráfica."""
@@ -125,8 +127,11 @@ def plot_weather_data():
 
 def main():
     """Crea hilos para ejecutar los consumidores y actualizar los datos."""
-    consumer_thread = threading.Thread(target=consume_weather, daemon=True)
-    consumer_thread.start()
+    openweather_thread = threading.Thread(target=consume_openweather, daemon=True)
+    nasa_thread = threading.Thread(target=consume_nasa, daemon=True)
+
+    openweather_thread.start()
+    nasa_thread.start()
 
     # Hilo para obtener y actualizar datos de MongoDB
     fetch_weather_thread = threading.Thread(target=fetch_and_update_weather_data, daemon=True)
@@ -135,5 +140,6 @@ def main():
     # Graficar en el hilo principal
     plot_weather_data()
 
+
 if __name__ == '__main__':
-    main()
+    main ()
