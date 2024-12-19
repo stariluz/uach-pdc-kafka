@@ -16,7 +16,7 @@ LON = -106.1394034006503
 URL = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric"
 
 # Configuración de API de la NASA
-API_KEY_NASA = 'pwREnD4cT4z5l6iccBP2dokQocPxFvEFhLDMMYaD' # API de la API de la NASA
+API_KEY_NASA = 'WMqy1ds8lOLdlsaS238kwyTvuW8kqzn9rD1enGMs' # API de la API de la NASA
 URL_NASA = f"https://api.nasa.gov/insight_weather/?api_key={API_KEY_NASA}&feedtype=json&ver=1.0"
 
 # Inicializa el productor de Kafka
